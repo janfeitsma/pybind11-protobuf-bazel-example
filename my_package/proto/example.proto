@@ -1,6 +1,13 @@
 syntax = "proto3";
 
 message MyMessage {
-   int32 my_int = 1;
-   string my_string = 2;
+   int32 my_int = 1; // keep for original example
+   string my_string = 2; // keep for original example
+
+   // stresstest
+   repeated int32 v = 3;
+   int32 n = 4;
+   int32 k = 5;
+   int64 s = 6;
 }
+
