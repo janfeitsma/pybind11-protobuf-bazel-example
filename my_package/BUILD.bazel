@@ -13,3 +13,17 @@ py_binary(
         # "@com_google_protobuf//:proto_api", # TODO - Is this required?
     ]
 )
+
+py_binary(
+    name = "stress",
+    srcs = ["stress.py"],
+    python_version = "PY3",
+    deps = [
+        "//my_package/proto:example_py_pb2",
+    ],
+    data = [
+        "//my_package/pybind11:my_extension.so",
+        "@com_google_protobuf//:protobuf_python",
+    ]
+)
+
