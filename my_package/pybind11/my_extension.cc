@@ -75,6 +75,41 @@ void f(google::protobuf::Message* in_out)
 }
 
 
+void g(py::buffer in_out_buffer)
+{
+    std::cout << std::fixed << std::setw(17) << std::setprecision(6) << GetCurrentTime() << " c++ g start " << std::endl;
+
+    // Get the pointer to the data and its size from the buffer
+    py::buffer_info buf_info = in_out_buffer.request();
+    const char* data = static_cast<const char*>(buf_info.ptr);
+    size_t size = buf_info.size;
+
+    // Create the protobuf message using its type
+    MyMessage message;
+
+    // Parse the message from the buffer using reflection
+    if (!message.ParseFromArray(data, size)) {
+        // Handle deserialization error if necessary
+        return;
+    }
+
+    // Call inner function f
+    f(&message);
+
+    // Serialize the modified message back to the buffer (in-place)
+    if (!message.SerializeToArray(const_cast<char*>(data), size)) {
+        // Handle serialization error
+        size_t actual_size = message.ByteSizeLong();
+        if (size < actual_size) {
+            // Handle insufficient buffer size error
+            std::cerr << "Buffer size is not sufficient for serialization: " << size << " < " << actual_size << std::endl;
+            return;
+        }
+    }
+
+    std::cout << std::fixed << std::setw(17) << std::setprecision(6) << GetCurrentTime() << " c++ g end " << std::endl;
+}
+
 PYBIND11_MODULE(my_extension, m) {
   pybind11_protobuf::ImportNativeProtoCasters();
   m.def("return_my_message", &ReturnMyMessage);
@@ -92,6 +127,19 @@ PYBIND11_MODULE(my_extension, m) {
         },
         pybind11::arg("in_out"),
         pybind11::call_guard<py::gil_scoped_release>()
+    );
+
+    // g wraps f
+    // Use py::buffer and memoryview to reduce overhead
+    m.def("g",
+        [](py::buffer in_out_buffer) {
+            // Call the C++ function passing the buffer
+            g(in_out_buffer);
+
+            // Return the same buffer (in-place modification)
+            return in_out_buffer;
+        },
+        pybind11::arg("in_out")
     );
 }
 
