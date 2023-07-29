@@ -32,45 +32,48 @@ double GetCurrentTime() {
 }
 
 // Function that modifies the Protobuf object in-place
-void f(google::protobuf::Message* in_out, const google::protobuf::Message& in) {
+void f(google::protobuf::Message* in_out)
+{
     std::cout << std::fixed << std::setw(17) << std::setprecision(6) << GetCurrentTime() << " c++ f start " << std::endl;
     if (in_out) {
 
-        // some deprecated warnings ... meh.
+        // Get the descriptors for the protobuf message
+        const google::protobuf::Reflection* reflection = in_out->GetReflection();
+        const google::protobuf::Descriptor* descriptor = in_out->GetDescriptor();
+        const google::protobuf::FieldDescriptor* v_field = descriptor->FindFieldByName("v");
+        const google::protobuf::FieldDescriptor* k_field = descriptor->FindFieldByName("k");
+        const google::protobuf::FieldDescriptor* n_field = descriptor->FindFieldByName("n");
+        const google::protobuf::FieldDescriptor* s_field = descriptor->FindFieldByName("s");
 
-        const google::protobuf::Reflection* in_reflection = in.GetReflection();
-        const google::protobuf::FieldDescriptor* v_field = in.GetDescriptor()->FindFieldByName("v");
-        const google::protobuf::FieldDescriptor* k_field = in.GetDescriptor()->FindFieldByName("k");
-        const google::protobuf::FieldDescriptor* s_field = in.GetDescriptor()->FindFieldByName("s");
+        // Check if the "v" field exists and is a repeated field
+        if (v_field && v_field->is_repeated()) {
 
-        const auto& in_v = in_reflection->GetRepeatedField<int32_t>(in, v_field);
-        auto* in_out_v = in_out->GetReflection()->MutableRepeatedField<int32_t>(in_out, v_field);
+            // Get the size of the repeated field "v"
+            int field_size = reflection->FieldSize(*in_out, v_field);
 
-        while (in_out_v->size() < in_v.size()) { // TODO optimize
-            in_out_v->Add(0);
-        }
-        std::cout << std::fixed << std::setw(17) << std::setprecision(6) << GetCurrentTime() << " c++ f allocated " << std::endl;
-
-        for (int i = 0; i < in_v.size(); ++i) {
-            (*in_out_v)[i] += in_v.Get(i);
-        }
-
-        const int32_t in_k = in_reflection->GetInt32(in, k_field);
-        for (int k = 1; k < in_k; ++k) {
-            for (int i = 0; i < in_v.size(); ++i) {
-                (*in_out_v)[i] += in_v.Get(i);
+            // Calculate the sum of the values in the repeated field "v"
+            int32_t k = reflection->GetInt32(*in_out, k_field);
+            int32_t n = reflection->GetInt32(*in_out, n_field);
+            int64_t sum = 0;
+            while (k--) { // repeat k times
+                for (int i = 0; i < std::min(n, field_size); ++i) {
+                    sum += reflection->GetRepeatedInt32(*in_out, v_field, i);
+                }
             }
+            std::cout << "field_size: " << field_size << std::endl;
+            std::cout << "Sum of values in v: " << sum << std::endl;
+
+            in_out->GetReflection()->SetInt64(in_out, s_field, sum);
+
+        } else {
+            // Handle the case when the "v" field does not exist or is not a repeated field
+            std::cerr << "ERROR: Field 'v' not found or not a repeated field." << std::endl;
         }
 
-        int64_t total = 0;
-        for (int i = 0; i < in_out_v->size(); ++i) {
-            total += (*in_out_v)[i];
-        }
-
-        in_out->GetReflection()->SetInt64(in_out, s_field, total);
     }
     std::cout << std::fixed << std::setw(17) << std::setprecision(6) << GetCurrentTime() << " c++ f end " << std::endl;
 }
+
 
 PYBIND11_MODULE(my_extension, m) {
   pybind11_protobuf::ImportNativeProtoCasters();
@@ -83,12 +86,11 @@ PYBIND11_MODULE(my_extension, m) {
 
     // Define the C++ function 'f' using py::arg and py::call_guard
     m.def("f",
-        [](MyMessage in_out, MyMessage in) {
-            f(&in_out, in);
+        [](MyMessage in_out) {
+            f(&in_out);
             return in_out;
         },
         pybind11::arg("in_out"),
-        pybind11::arg("in"),
         pybind11::call_guard<py::gil_scoped_release>()
     );
 }
